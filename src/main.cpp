@@ -39,14 +39,56 @@ String rcvNum;
 bool motor;
 float RY, YB, BR;
 bool bypass = true;
-String delmsg = "AT+CMGDA=DEL ALL";
+
 char ry1[4];
 char yb1[4];
 char br1[4];
 char hour[3];
 char minute[3];
-String ry, yb, br, hourstr, minutestr;
-String sendmsg;
+
+
+//Constant Messages:
+const char* delmsgcmd = "AT+CMGDA=DEL ALL";
+const char* numdeletemsg = "Numbers Deleted";
+const char* gsmconmsg = "CON2GSM";
+const char* atcmd = "AT";
+const char* textmodecmd = "AT+CMGF=1";
+const char* gettextmodecmd = "AT+CMGF?";
+const char* motorontext = "Motor ON";
+const char* motorofftext = "Motor Off";
+const char* stateprefix = "@STATE";
+const char* ridprefix = "#RID";
+const char* dataprefix = "&DATA=";
+const char* motorstateprefix = "%MOTORSTATE:";
+const char* pwrstateprefix = "%PWRSTATE:";
+const char* ryprefix = "%RY:";
+const char* ybprefix = "%YB:";
+const char* brprefix = "%BR:";
+const char* phaseprefix = "%PHASE:";
+const char* timeprefix = "%TIME:";
+const char* alarmprefix = "%ALARM:";
+const char* endprefix = "%OK";
+const char* donemsg = "Done";
+const char* motortimeroffmsg = "Motor Stopped, Timeout.";
+const char* runprefix = "RUN";
+const char* stopprefix = "STP";
+const char* errprefix = "ERR";
+const char* errresponse = "%ERR:";
+const char* errmsg = "Error Occured";
+const char* smsnotifprefix = "+CMTI";
+const char* smsreadcmd = "AT+CMGR=";
+const char* smsreadresponse = "+CMGR";
+const char* linkcmdprefix = "@LK";
+const char* connectedresponse = "%CONNECTED";
+const char* memfulmsg = "MEMFUL";
+const char* getdataprefix = "GETDATA";
+const char* setdataprefix = "SETDATA";
+const char* smstocmd = "AT+CMGS=\"+91";
+
+
+
+
+
 void readParameters() {
   VCALRI = 4 * EEPROM.read(0);
   VCALYI = 4 * EEPROM.read(1);
@@ -79,7 +121,7 @@ void deleteAllNums() {
   for(int i = 10; i < 60; i++){
     EEPROM.update(i, 0);
   }
-  Serial.println("Numbers Deleted!");
+  Serial.println(numdeletemsg);
 }
 
 uint8_t getSavedNumbersLoc() {
@@ -205,17 +247,17 @@ void setup()
   //Begin serial communication with Arduino and SIM800L
   gsm.begin(19200);
 
-  Serial.println("CON2GSM");
-  gsm.println("AT");
+  Serial.println(gsmconmsg);
+  gsm.println(atcmd);
   delay(300);
-  gsm.println("AT+CMGF=1");
+  gsm.println(textmodecmd);
   delay(300);
-  gsm.println("AT+CMGF?");
-  gsm.println(delmsg);
+  gsm.println(gettextmodecmd);
+  gsm.println(delmsgcmd);
   readNumbers();
   //Serial.println("Saved Numbers: \nNum1: " + phone1 + "\nNum2: " + phone2 + "\nNum3: " + phone3 + "\nNum4: " + phone4 + "\nNum5: " + phone5);
   Serial.println("Total Saved: " + (String)getSavedNumbersLoc());
-  Serial.println(motor ? "Motor ON":"Motor OFF");
+  Serial.println(motor ? motorontext:motorofftext);
 }
 /*
 float checkhz() {
@@ -250,9 +292,6 @@ float rin1, yin1, bin1;
   sprintf(ry1, "%03d", (int)RY);
   sprintf(yb1, "%03d", (int)YB);
   sprintf(br1, "%03d", (int)BR);
-  ry = (String)ry1;
-  yb = (String)yb1;
-  br = (String)br1;
 }
 
 void updateParameters() {
@@ -320,15 +359,13 @@ bool isNumberAllowed (String msg) {
 
 String getRemainingTime() {
   long second;
-  second = motorOffTimer.getDuration();
+  second = motorOffTimer.convert(motorOffTimer.getTimeUntilTrigger(), SECONDS);
   int hr, min;
   hr = second / 3600;
   min = (second % 3600) / 60;
   sprintf(hour, "%02d", hr);
   sprintf(minute, "%02d", min);
-  hourstr = (String)hour;
-  minutestr = (String)minute;
-  return hourstr + ":" + minutestr;
+  return (String)hour + ":" + (String)minute;
 }
 
 
@@ -393,8 +430,8 @@ String getMotorState() {
 }
 
 String requestID(String request) {
-  if(request.indexOf("#RID") != -1){
-    String rid = request.substring(request.indexOf("#RID") + 4, request.indexOf("#RID") + 8);
+  if(request.indexOf(ridprefix) != -1){
+    String rid = request.substring(request.indexOf(ridprefix) + 4, request.indexOf(ridprefix) + 8);
     return rid;
   } else {
     return "NoRID";
@@ -408,9 +445,9 @@ void sendSMS(String phone, String msg1){
   sendmsg += phone;
   sendmsg += "\"";
   */
-  Serial.println(sendmsg);
+  Serial.println(smstocmd + rcvNum + "\"");
   delay(300);
-  gsm.println(sendmsg);
+  gsm.println(smstocmd + rcvNum + "\"");
   delay(300);
   gsm.print(msg1);
   delay(300);
@@ -449,33 +486,31 @@ void getData(String tempdata, String rid) {
   TMSG +="%ALARM:" + TALM;
   TMSG +="%END";
   */
-  String TMSG;
-  TMSG += "@STATE#RID" + rid;
-  TMSG += "&DATA=";
-  TMSG +="%MOTORSTATE:" + getMotorState();
-  TMSG +="%PWRSTATE:" + getPwrState();
-  TMSG +="%RY:" + ry;
-  TMSG +="%YB:" + yb;
-  TMSG +="%BR:" + br;
-  TMSG +="%PHASE:" + getPhaseSeq();
-  TMSG +="%TIME:" + getRemainingTime();
-  TMSG +="%ALARM:" + getAlarm();
-  TMSG +="%END";
   /*
   String sendmsg;
   sendmsg = "AT+CMGS=\"+91";
   sendmsg += rcvNum;
   sendmsg += "\"";
   */
-  gsm.println(sendmsg);
+  gsm.println(smstocmd + rcvNum + "\"");
   delay(300);
-  gsm.print(TMSG);
+  gsm.print(stateprefix + (String)ridprefix + rid
+  + dataprefix
+  + motorstateprefix + getMotorState()
+  + pwrstateprefix + getPwrState()
+  + ryprefix + (String)ry1
+  + ybprefix + (String)yb1
+  + brprefix + (String)br1
+  + phaseprefix + getPhaseSeq()
+  + timeprefix + getRemainingTime()
+  + alarmprefix + getAlarm()
+  + endprefix);
   delay(300);
   gsm.write(26);
   delay(300);
   gsm.println();
   delay(300);
-  Serial.println("done.");
+  Serial.println(donemsg);
   data = "";
   //sendSMS(rcvNum);
 
@@ -499,40 +534,28 @@ void startTime(String time) {
 void timeUp() {
   motor = false;
   motorOffTimer.stop();
-  sendSMS(rcvNum, "Motor Stopped, Timer Off");
+  sendSMS(rcvNum, motortimeroffmsg);
 }
 
 void setData(String tempdata, String rid) {
   String temptime, tempmotor;
-  if(tempdata.indexOf("%MOTORSTATE:") != -1){
-    tempmotor = tempdata.substring(tempdata.indexOf("%MOTORSTATE:") + 12, tempdata.indexOf("%MOTORSTATE:") + 15);
-    if(tempmotor == "RUN"){
-      if(tempdata.indexOf("%TIME:") != -1){
-        temptime = tempdata.substring(tempdata.indexOf("%TIME:") + 6, tempdata.indexOf("%TIME:") + 11);
+  if(tempdata.indexOf(motorstateprefix) != -1){
+    tempmotor = tempdata.substring(tempdata.indexOf(motorstateprefix) + 12, tempdata.indexOf(motorstateprefix) + 15);
+    if(tempmotor == runprefix){
+      if(tempdata.indexOf(timeprefix) != -1){
+        temptime = tempdata.substring(tempdata.indexOf(timeprefix) + 6, tempdata.indexOf(timeprefix) + 11);
         startTime(temptime);
       } else {
         motor = true;
       }
     }
-    else if (tempmotor == "STP")
+    else if (tempmotor == stopprefix)
     {
       motor = false;
     } else 
     {
       Serial.println("ErMTRCMD");
     }
-    String TMSG;
-    TMSG += "@STATE#RID" + rid;
-    TMSG += "&DATA=REQOK";
-    TMSG +="%MOTORSTATE:" + getMotorState();
-    TMSG +="%PWRSTATE:" + getPwrState();
-    TMSG +="%RY:" + ry;
-    TMSG +="%YB:" + yb;
-    TMSG +="%BR:" + br;
-    TMSG +="%PHASE:" + getPhaseSeq();
-    TMSG +="%TIME:" + getRemainingTime();
-    TMSG +="%ALARM:" + getAlarm();
-    TMSG +="%END";
     /*
     String sendmsg;
     sendmsg = "AT+CMGS=\"+91";
@@ -540,9 +563,19 @@ void setData(String tempdata, String rid) {
     sendmsg += "\"";
     */
     delay(300);
-    gsm.println(sendmsg);
+    gsm.println(smstocmd + rcvNum + "\"");
     delay(300);
-    gsm.print(TMSG);
+    gsm.print(stateprefix + (String)ridprefix + rid
+    + dataprefix + "REOK"
+    + motorstateprefix + getMotorState()
+    + pwrstateprefix + getPwrState()
+    + ryprefix + ry1
+    + ybprefix + yb1
+    + brprefix + br1
+    + phaseprefix + getPhaseSeq()
+    + timeprefix + getRemainingTime()
+    + alarmprefix + getAlarm()
+    + endprefix);
     delay(300);
     gsm.write(26);
     delay(300);
@@ -593,7 +626,7 @@ void loop()
 {
 
   if(deleteMsg.triggered(true)){
-    gsm.println(delmsg);
+    gsm.println(delmsgcmd);
   }
 
   if(!digitalRead(dltbtn)){
@@ -619,34 +652,31 @@ void loop()
     data = gsm.readString();
     Serial.println(data);
   }
-  if(data.indexOf("ERR") != -1){
-    Serial.println("Error");
+  if(data.indexOf(errprefix) != -1){
+    Serial.println(errmsg);
     //digitalWrite(lede, HIGH);
     data = "";
   }
-  if(data.indexOf("+CMTI") != -1) {
+  if(data.indexOf(smsnotifprefix) != -1) {
     String msgindex;
     msgindex = data.substring(data.indexOf(",")+1, data.indexOf(",")+2);
     data = "";
     delay(300);
-    gsm.println("AT+CMGR=" + msgindex);
+    gsm.println(smsreadcmd + msgindex);
   }
   if(data.indexOf("OK") != -1){
       Serial.println("GSM OK");
       //digitalWrite(lede, LOW);
       if(data.length() > 5){
-        if(data.indexOf("+CMGR") != -1) {
+        if(data.indexOf(smsreadresponse) != -1) {
             Serial.println("Cmd " + data);
-          if(data.indexOf("@LK") != -1)
+          if(data.indexOf(linkcmdprefix) != -1)
             {
               String num, password;
-              password = data.substring((data.indexOf("@LK") + 3), (data.indexOf("@LK") + 7));
+              password = data.substring((data.indexOf(linkcmdprefix) + 3), (data.indexOf(linkcmdprefix) + 7));
             //numloc = data.substring((data.indexOf("#")) + 1, (data.indexOf("#")) + 2);
               num = data.substring((data.indexOf("&") + 1), (data.indexOf("&") + 11));
               rcvNum = num;
-              sendmsg = "AT+CMGS=\"+91";
-              sendmsg += rcvNum;
-              sendmsg += "\"";
               if(password == pass) {
             //delay(500);
               const char* tempnum = num.c_str();
@@ -687,10 +717,10 @@ void loop()
               sendmsg = sendmsg + rcvNum;
               sendmsg = sendmsg + "\"";
               */
-              Serial.println(sendmsg);
-              gsm.println(sendmsg);
+              Serial.println(smstocmd + rcvNum + "\"");
+              gsm.println(smstocmd + rcvNum + "\"");
               delay(300);
-              gsm.print("#RID" + requestID(data) + "%CONNECTED");
+              gsm.print(ridprefix + requestID(data) + connectedresponse);
               delay(300);
               gsm.write(26);
               data = "";
@@ -702,10 +732,10 @@ void loop()
               sendmsg = sendmsg + "\"";
               */
               Serial.println("memful");
-              Serial.println(sendmsg);
-              gsm.println(sendmsg);
+              Serial.println(smstocmd + rcvNum + "\"");
+              gsm.println(smstocmd + rcvNum + "\"");
               //delay(200);
-              gsm.print("RID#" + requestID(data) + "%ERR:MEMFUL");
+              gsm.print(ridprefix + requestID(data) + errresponse + memfulmsg);
               //delay(200);
               gsm.write(26);
               //delay(200);
@@ -721,17 +751,14 @@ void loop()
           else if(isNumberAllowed(data))
           {
 
-            sendmsg = "AT+CMGS=\"+91";
-            sendmsg += rcvNum;
-            sendmsg += "\"";
             Serial.println("AGRNT");
-            if(data.indexOf("@STATE") != 1)
+            if(data.indexOf(stateprefix) != 1)
             {
-              if(data.indexOf("GETDATA") != -1)
+              if(data.indexOf(getdataprefix) != -1)
               {
                 getData(data, requestID(data));
               } 
-              else if(data.indexOf("SETDATA") != -1)
+              else if(data.indexOf(setdataprefix) != -1)
               {
                 setData(data, requestID(data));
               }
